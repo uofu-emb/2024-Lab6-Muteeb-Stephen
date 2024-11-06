@@ -24,16 +24,16 @@ SemaphoreHandle_t xSemaphore;
 #define SUPERVISOR_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 #define SUBORDINATE_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
-//Low priority task
+// Low priority task
 void subordinate_task_low(__unused void *params)
 {
     while (1)
     {
         printf("starting low subordinate task while loop\n");
-        //Wait for semaphore to become available
+        // Wait for semaphore to become available
         if (xSemaphoreTake(xSemaphore, 10000) == pdTRUE)
         {
-            //Take semaphore, then run busy wait loop to simulate a computation on a shared variable, then give back semaphore
+            // Take semaphore, then run busy wait loop to simulate a computation on a shared variable, then give back semaphore
             printf("Starting computation in low subordinate task\n");
             sleep_ms(10000);
             printf("Finished computation giving back semaphore in low subordinate task\n");
@@ -43,20 +43,20 @@ void subordinate_task_low(__unused void *params)
     }
 }
 
-//Medium priority task
+// Medium priority task
 void subordinate_task_medium(__unused void *params)
 {
     while (1)
     {
-        
+
         printf("Starting computation 2 in medium subordinate task\n");
-        //Run busy wait loop to simulate computing something
+        // Run busy wait loop to simulate computing something
         sleep_ms(20000);
         printf("Finished computation 2 in medium subordinate task\n");
     }
 }
 
-//High priority task
+// High priority task
 void subordinate_task_high(__unused void *params)
 {
     while (1)
@@ -64,8 +64,8 @@ void subordinate_task_high(__unused void *params)
         printf("starting high subordinate task while loop\n");
         if (xSemaphoreTake(xSemaphore, 10000) == pdTRUE)
         {
-            //Take semaphore, then run busy wait loop to simulate a computation on a shared variable, 
-            //then give back semaphore
+            // Take semaphore, then run busy wait loop to simulate a computation on a shared variable,
+            // then give back semaphore
             printf("Starting computation in high subordinate task\n");
             sleep_ms(5000);
             printf("Finished computation giving back semaphore in high subordinate task\n");
@@ -74,10 +74,9 @@ void subordinate_task_high(__unused void *params)
     }
 }
 
-
 void supervisor_task(__unused void *params)
 {
-    //Create binary semaphore
+    // Create binary semaphore
     xSemaphore = xSemaphoreCreateBinary();
     if (xSemaphore == NULL)
     {
@@ -88,7 +87,7 @@ void supervisor_task(__unused void *params)
     // Initially set the semaphore to available state.
     xSemaphoreGive(xSemaphore);
 
-    //Start low task and delay to have it take semaphore 
+    // Start low task and delay to have it take semaphore
     printf("Stating low priority task\n");
     xTaskCreate(subordinate_task_low, "SubordinateLow",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_3_PRIORITY, NULL);
@@ -98,25 +97,23 @@ void supervisor_task(__unused void *params)
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_1_PRIORITY, NULL);
 
     vTaskDelay(1);
-    //Start medium task to have it interrupt low task and start computation
+    // Start medium task to have it interrupt low task and start computation
     printf("Stating medium priority task\n");
     xTaskCreate(subordinate_task_medium, "SubordinateMedium",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_2_PRIORITY, NULL);
-    
 
-    //Start high task, but it won't be able to do anything since low task has semaphore
-    //printf("Stating high priority...\n");
-
+    // Start high task, but it won't be able to do anything since low task has semaphore
+    // printf("Stating high priority...\n");
 
     vTaskDelay(100000);
 
-    //Expect to see: 
-    //starting low prioirty task, starting computation in low priority task
-    //starting medium prioirty task, starting computation in medium priority task
-    //starting high prioirty
-    //finished computation in medium priority task
-    //finished computation in low priority task
-    //starting computation in high priority task
+    // Expect to see:
+    // starting low prioirty task, starting computation in low priority task
+    // starting medium prioirty task, starting computation in medium priority task
+    // starting high prioirty
+    // finished computation in medium priority task
+    // finished computation in low priority task
+    // starting computation in high priority task
 
     while (1)
     {
