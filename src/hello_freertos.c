@@ -14,37 +14,83 @@
 #include "pico/multicore.h"
 #include "pico/cyw43_arch.h"
 
-bool shared_value = false;
+
 SemaphoreHandle_t xSemaphore;
 
 #define SUPERVISOR_TASK_PRIORITY (tskIDLE_PRIORITY + 1UL)
 #define SUBORDINATE_TASK_1_PRIORITY (tskIDLE_PRIORITY + 2UL)
 #define SUBORDINATE_TASK_2_PRIORITY (tskIDLE_PRIORITY + 3UL)
+#define SUBORDINATE_TASK_3_PRIORITY (tskIDLE_PRIORITY + 4UL)
 #define SUPERVISOR_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 #define SUBORDINATE_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
-void subordinate_task(__unused void *params)
+//Low priority task
+void subordinate_task_low(__unused void *params)
 {
     while (1)
     {
-        printf("In the subordinate\n");
+        printf("starting low subordinate task while loop\n");
+        //Wait for semaphore to become available
         if (xSemaphoreTake(xSemaphore, 10000) == pdTRUE)
         {
-            shared_value = !shared_value;
-            printf("Updated semaphore %d\n", shared_value);
-            vTaskDelay(10000);
+            //Take semaphore, then run busy wait loop to simulate a computation on a shared variable, then give back semaphore
+            printf("Starting computation in low subordinate task\n");
+            for (int i = 0; i < 50000; i++)
+            {
+                __nop();
+            }
+            printf("Finished computation giving back semaphore in high subordinate task\n");
             xSemaphoreGive(xSemaphore);
         }
     }
 }
 
+//Medium priority task
+void subordinate_task_medium(__unused void *params)
+{
+    while (1)
+    {
+        printf("Starting computation 1 in medium subordinate task\n");
+        //Run busy wait loop to simulate computing something
+        for (int i = 0; i < 50000; i++)
+        {
+            __nop();
+        }
+        printf("Starting computation 2 in medium subordinate task\n");
+        for (int i = 0; i < 50000; i++)
+        {
+            __nop();
+        }
+        printf("Finished computation 2 in medium subordinate task\n");
+        vTaskDelay(5000);
+    }
+}
+
+//High priority task
+void subordinate_task_high(__unused void *params)
+{
+    while (1)
+    {
+        printf("starting high subordinate task while loop\n");
+        if (xSemaphoreTake(xSemaphore, 10000) == pdTRUE)
+        {
+            //Take semaphore, then run busy wait loop to simulate a computation on a shared variable, 
+            //then give back semaphore
+            printf("Starting computation in high subordinate task\n");
+            for (int i = 0; i < 50000; i++)
+            {
+                __nop();
+            }
+            printf("Finished computation giving back semaphore in high subordinate task\n");
+            xSemaphoreGive(xSemaphore);
+        }
+    }
+}
+
+
 void supervisor_task(__unused void *params)
 {
-    // printf("where0...\n");
-
-    // printf("where1...\n");
-
-    // printf("where2...\n");
+    //Create binary semaphore
     xSemaphore = xSemaphoreCreateBinary();
     if (xSemaphore == NULL)
     {
@@ -54,20 +100,36 @@ void supervisor_task(__unused void *params)
 
     // Initially set the semaphore to available state.
     xSemaphoreGive(xSemaphore);
-    // TaskHandle_t subordinate_task1, subordinate_task2;
 
-    printf("Stating low priority...\n");
-    xTaskCreate(subordinate_task, "SubordinateThread2",
+    //Start low task and delay to have it take semaphore 
+    printf("Stating low priority task\n");
+    xTaskCreate(subordinate_task_low, "SubordinateThread2",
+                SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_3_PRIORITY, NULL);
+    vTaskDelay(500);
+
+    //Start medium task to have it interrupt low task and start computation
+    printf("Stating medium priority task\n");
+    xTaskCreate(subordinate_task_medium, "SubordinateThread3",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_2_PRIORITY, NULL);
+    vTaskDelay(500);
 
-    vTaskDelay(10000);
-
+    //Start high task, but it won't be able to do anything since low task has semaphore
     printf("Stating high priority...\n");
     xTaskCreate(subordinate_task, "SubordinateThread1",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_1_PRIORITY, NULL);
+
+    vTaskDelay(100000);
+
+    //Expect to see: 
+    //starting low prioirty task, starting computation in low priority task
+    //starting medium prioirty task, starting computation in medium priority task
+    //starting high prioirty
+    //finished computation in medium priority task
+    //finished computation in low priority task
+    //starting computation in high priority task
+
     while (1)
     {
-        printf("Hi there!\n");
         vTaskDelay(1000);
     }
 }
