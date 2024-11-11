@@ -1,3 +1,9 @@
+/**
+ * Copyright (c) 2022 Raspberry Pi (Trading) Ltd.
+ *
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+
 #include <stdio.h>
 #include <pico/stdlib.h>
 #include <stdint.h>
@@ -16,17 +22,28 @@
 void setUp(void) {}
 
 void tearDown(void) {}
-/**
- * Copyright (c) 2022 Raspberry Pi (Trading) Ltd.
- *
- * SPDX-License-Identifier: BSD-3-Clause
- */
-
-
 
 int x = 0;
 int y = 0;
 SemaphoreHandle_t xSemaphore;
+
+// Define the function signature for thread functions
+typedef void (*thread_function)(void);
+
+struct task_args
+{
+    int start_first;
+    int thread_1_priority;
+    int thread_2_priority;
+    thread_function thread_1_function;
+    thread_function thread_2_function;
+};
+
+struct task_reply
+{
+    configRUN_TIME_COUNTER_TYPE thread_1_duration;
+    configRUN_TIME_COUNTER_TYPE thread_2_duration;
+};
 
 #define SUPERVISOR_TASK_PRIORITY (tskIDLE_PRIORITY + 4UL)
 #define SUBORDINATE_TASK_HIGH_PRIORITY (tskIDLE_PRIORITY + 3UL)
@@ -35,16 +52,19 @@ SemaphoreHandle_t xSemaphore;
 #define SUPERVISOR_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 #define SUBORDINATE_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
-//Low priority task
+#define LOW_PRIORITY (tskIDLE_PRIORITY + 1UL)
+#define HIGH_PRIORITY (tskIDLE_PRIORITY + 2UL)
+
+// Low priority task
 void subordinate_task_low(__unused void *params)
 {
     while (1)
     {
         printf("starting low task while loop\n");
-        //Wait for semaphore to become available
+        // Wait for semaphore to become available
         if (xSemaphoreTake(xSemaphore, 10000) == pdTRUE)
         {
-            //Take semaphore, then run busy wait loop to simulate a computation on a shared variable, then give back semaphore
+            // Take semaphore, then run busy wait loop to simulate a computation on a shared variable, then give back semaphore
             printf("Starting busy wait in low task\n");
             busy_wait_ms(10000);
             printf("Finished busy wait in low task\n");
@@ -53,20 +73,20 @@ void subordinate_task_low(__unused void *params)
     }
 }
 
-//Medium priority task
+// Medium priority task
 void subordinate_task_medium(__unused void *params)
 {
     while (1)
     {
         printf("Starting busy wait in medium task\n");
-        //Run busy wait loop to simulate computing something
+        // Run busy wait loop to simulate computing something
         busy_wait_ms(5000);
         x = 1;
         printf("Finished busy wait in medium task\n");
     }
 }
 
-//High priority task
+// High priority task
 void subordinate_task_high(__unused void *params)
 {
     while (1)
@@ -74,8 +94,8 @@ void subordinate_task_high(__unused void *params)
         printf("starting high subordinate task while loop\n");
         if (xSemaphoreTake(xSemaphore, 10000) == pdTRUE)
         {
-            //Take semaphore, then run busy wait loop to simulate a computation on a shared variable, 
-            //then give back semaphore
+            // Take semaphore, then run busy wait loop to simulate a computation on a shared variable,
+            // then give back semaphore
             printf("Starting busy wait in high task\n");
             busy_wait_ms(10000);
             y = 1;
@@ -85,16 +105,13 @@ void subordinate_task_high(__unused void *params)
     }
 }
 
-
-
-
-
-
-void test_binary(void) {
-    //initialize test variables
+void test_binary(void)
+{
+    printf("\nTEST :: Starting test_binary\n");
+    // initialize test variables
     x = 0;
     y = 0;
-    //Create binary semaphore
+    // Create binary semaphore
     xSemaphore = xSemaphoreCreateBinary();
     if (xSemaphore == NULL)
     {
@@ -105,51 +122,48 @@ void test_binary(void) {
     // Initially set the semaphore to available state.
     xSemaphoreGive(xSemaphore);
 
-    //need these to delete tasks
+    // need these to delete tasks
     TaskHandle_t low, med, high;
 
-    //Start low task and delay to have it take semaphore 
+    // Start low task and delay to have it take semaphore
     printf("Stating low priority task\n");
     xTaskCreate(subordinate_task_low, "SubordinateLow",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_LOW_PRIORITY, &low);
     vTaskDelay(1);
 
-    //Start high task right after
+    // Start high task right after
     printf("Stating high priority task\n");
     xTaskCreate(subordinate_task_high, "SubordinateHigh",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_HIGH_PRIORITY, &high);
     vTaskDelay(1);
 
-    //Start medium task to have it interrupt low task and start computation
+    // Start medium task to have it interrupt low task and start computation
     printf("Stating medium priority task\n");
     xTaskCreate(subordinate_task_medium, "SubordinateMedium",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_MED_PRIORITY, &med);
 
-
-    //wait 20 seconds for tasks to run
+    // wait 20 seconds for tasks to run
     vTaskDelay(20000);
 
-    //tear down
+    // tear down
     vSemaphoreDelete(xSemaphore);
     vTaskDelete(low);
     vTaskDelete(med);
     vTaskDelete(high);
 
-    //If x equals 1 and y equals zero, the medium task completed before the high task
-    //and priority inversion happened
+    // If x equals 1 and y equals zero, the medium task completed before the high task
+    // and priority inversion happened
     TEST_ASSERT_EQUAL_INT(1, x);
     TEST_ASSERT_EQUAL_INT(0, y);
 }
 
-
-
-
-void test_mutex(void) {
-    //initialize test variables
+void test_mutex(void)
+{
+    printf("\nTEST :: Starting test_mutex\n");
+    // initialize test variables
     x = 0;
     y = 0;
-    printf("starting test_mutex\n");
-    //Create mutex
+    // Create mutex
     xSemaphore = xSemaphoreCreateMutex();
     if (xSemaphore == NULL)
     {
@@ -160,62 +174,265 @@ void test_mutex(void) {
     // Initially set the semaphore to available state.
     xSemaphoreGive(xSemaphore);
 
-    //need these to delete tasks
+    // need these to delete tasks
     TaskHandle_t low, med, high;
 
-    //Start low task and delay to have it take semaphore 
+    // Start low task and delay to have it take semaphore
     printf("Stating low priority task\n");
     xTaskCreate(subordinate_task_low, "SubordinateLow",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_LOW_PRIORITY, &low);
     vTaskDelay(1);
 
-    //Start high task right after
+    // Start high task right after
     printf("Stating high priority task\n");
     xTaskCreate(subordinate_task_high, "SubordinateHigh",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_HIGH_PRIORITY, &high);
     vTaskDelay(1);
 
-    //Start medium task to have it interrupt low task and start computation
+    // Start medium task to have it interrupt low task and start computation
     printf("Stating medium priority task\n");
     xTaskCreate(subordinate_task_medium, "SubordinateMedium",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_MED_PRIORITY, &med);
 
-
-    //wait 20 seconds for tasks to run
+    // wait 20 seconds for tasks to run
     vTaskDelay(20000);
 
-    //tear down
+    // tear down
     vSemaphoreDelete(xSemaphore);
     vTaskDelete(low);
     vTaskDelete(med);
     vTaskDelete(high);
 
-    //If x equals 0 and y equals 1, the high task completed before the medium task
-    //and priority inversion did not happen
+    // If x equals 0 and y equals 1, the high task completed before the medium task
+    // and priority inversion did not happen
     TEST_ASSERT_EQUAL_INT(0, x);
     TEST_ASSERT_EQUAL_INT(1, y);
-
 }
 
+void busy_busy()
+{
+    int ans = (2 * 32 * -3) / (-2);
+    printf("Start busy_busy: %d\n", ans);
+    for (int i = 0;; i++)
+        ;
+}
 
+void busy_yield(void)
+{
+    int ans = (2 * 32 * -3) / (-2);
+    printf("Start busy_yield: %d\n", ans);
+    for (int i = 0;; i++)
+    {
+        taskYIELD();
+    }
+}
 
+struct task_reply run_task(void *params)
+{
+    TaskHandle_t thread_1, thread_2;
+    struct task_reply reply = {0, 0};
+    struct task_args *args = (struct task_args *)params;
 
+    // Start both thread at same time
+    if (args->start_first == 0)
+    {
+        // printf("Starting thread 1...\n");
+        xTaskCreate(args->thread_1_function, "Thread1",
+                    SUBORDINATE_TASK_STACK_SIZE, NULL, args->thread_1_priority, &thread_1);
 
+        // printf("Starting thread 2...\n");
+        xTaskCreate(args->thread_2_function, "Thread1",
+                    SUBORDINATE_TASK_STACK_SIZE, NULL, args->thread_2_priority, &thread_2);
 
+        printf("Started thread 1 & 2 together...\n");
+    }
+    else if (args->start_first == 1)
+    {
+
+        printf("Starting thread 1...\n");
+        xTaskCreate(args->thread_1_function, "Thread1",
+                    SUBORDINATE_TASK_STACK_SIZE, NULL, args->thread_1_priority, &thread_1);
+
+        vTaskDelay(10 * 1000);
+
+        printf("Starting thread 2...\n");
+        xTaskCreate(args->thread_2_function, "Thread1",
+                    SUBORDINATE_TASK_STACK_SIZE, NULL, args->thread_2_priority, &thread_2);
+
+        printf("Started thread 1 started first...\n");
+    }
+    else if (args->start_first == 2)
+    {
+        printf("Starting thread 2...\n");
+        xTaskCreate(args->thread_2_function, "Thread1",
+                    SUBORDINATE_TASK_STACK_SIZE, NULL, args->thread_2_priority, &thread_2);
+
+        vTaskDelay(10 * 1000);
+
+        printf("Starting thread 1...\n");
+        xTaskCreate(args->thread_1_function, "Thread1",
+                    SUBORDINATE_TASK_STACK_SIZE, NULL, args->thread_1_priority, &thread_1);
+
+        printf("Started thread 2 started first...\n");
+    }
+    else
+    {
+        printf("Invalid 'start_first' configuration. Supported values: 0, 1, 2.\n");
+        return reply;
+    }
+
+    printf("Collecting runtime...\n");
+    vTaskDelay(30 * 1000); // Wait for 30 seconds to collect results.
+
+    reply.thread_1_duration = ulTaskGetRunTimeCounter(thread_1);
+    reply.thread_2_duration = ulTaskGetRunTimeCounter(thread_2);
+    printf("Thread 1 duration: %lld, Thread 2 duration: %lld\n", reply.thread_1_duration, reply.thread_2_duration);
+
+    return reply;
+}
+
+void test_same_priority_busy_busy(__unused void *params)
+{
+    printf("\nTEST :: test_same_priority_busy_busy\n");
+
+    struct task_args args;
+    args.start_first = 0;
+    args.thread_1_priority = LOW_PRIORITY;
+    args.thread_2_priority = LOW_PRIORITY;
+    args.thread_1_function = busy_busy;
+    args.thread_2_function = busy_busy;
+
+    struct task_reply reply;
+    reply = run_task(&args);
+
+    TEST_ASSERT_INT_WITHIN(2000, reply.thread_1_duration, reply.thread_2_duration);
+}
+
+void test_same_priority_yield_yield(__unused void *params)
+{
+    printf("\nTEST :: test_same_priority_yield_yield\n");
+
+    struct task_args args;
+    args.start_first = 0;
+    args.thread_1_priority = LOW_PRIORITY;
+    args.thread_2_priority = LOW_PRIORITY;
+    args.thread_1_function = busy_yield;
+    args.thread_2_function = busy_yield;
+
+    struct task_reply reply;
+    reply = run_task(&args);
+
+    TEST_ASSERT(reply.thread_1_duration < 50000);
+    TEST_ASSERT(reply.thread_2_duration < 50000);
+}
+
+void test_same_priority_busy_yield(__unused void *params)
+{
+    printf("\nTEST :: test_same_priority_busy_yield\n");
+
+    struct task_args args;
+    args.start_first = 0;
+    args.thread_1_priority = LOW_PRIORITY;
+    args.thread_2_priority = LOW_PRIORITY;
+    args.thread_1_function = busy_busy;
+    args.thread_2_function = busy_yield;
+
+    struct task_reply reply;
+    reply = run_task(&args);
+
+    TEST_ASSERT(reply.thread_1_duration > 50000);
+    TEST_ASSERT(reply.thread_2_duration < 50000);
+}
+
+void test_diff_priority_busy_busy_high_first(__unused void *params)
+{
+    printf("\nTEST :: test_diff_priority_busy_busy_high_first\n");
+
+    struct task_args args;
+    args.start_first = 1;
+    args.thread_1_priority = HIGH_PRIORITY;
+    args.thread_2_priority = LOW_PRIORITY;
+    args.thread_1_function = busy_busy;
+    args.thread_2_function = busy_busy;
+
+    struct task_reply reply;
+    reply = run_task(&args);
+
+    TEST_ASSERT(reply.thread_1_duration > 100000);
+    TEST_ASSERT(reply.thread_2_duration < 1000);
+}
+
+void test_diff_priority_busy_busy_low_first(__unused void *params)
+{
+    printf("\nTEST :: test_diff_priority_busy_busy_low_first\n");
+
+    struct task_args args;
+    args.start_first = 2;
+    args.thread_1_priority = HIGH_PRIORITY;
+    args.thread_2_priority = LOW_PRIORITY;
+    args.thread_1_function = busy_busy;
+    args.thread_2_function = busy_busy;
+
+    struct task_reply reply;
+    reply = run_task(&args);
+
+    TEST_ASSERT(reply.thread_1_duration > 100000);
+    TEST_ASSERT(reply.thread_2_duration < 1000);
+}
+
+void test_diff_priority_yield_yield_high_first(__unused void *params)
+{
+    printf("\nTEST :: test_diff_priority_yield_yield_high_first\n");
+
+    struct task_args args;
+    args.start_first = 1;
+    args.thread_1_priority = HIGH_PRIORITY;
+    args.thread_2_priority = LOW_PRIORITY;
+    args.thread_1_function = busy_yield;
+    args.thread_2_function = busy_yield;
+
+    struct task_reply reply;
+    reply = run_task(&args);
+
+    TEST_ASSERT(reply.thread_1_duration > 40000);
+    TEST_ASSERT(reply.thread_2_duration < 1000);
+}
+
+void test_diff_priority_yield_yield_low_first(__unused void *params)
+{
+    printf("\nTEST :: test_diff_priority_yield_yield_low_first\n");
+
+    struct task_args args;
+    args.start_first = 2;
+    args.thread_1_priority = HIGH_PRIORITY;
+    args.thread_2_priority = LOW_PRIORITY;
+    args.thread_1_function = busy_yield;
+    args.thread_2_function = busy_yield;
+
+    struct task_reply reply;
+    reply = run_task(&args);
+
+    TEST_ASSERT(reply.thread_1_duration > 20000);
+    // TEST_ASSERT(reply.thread_2_duration > 10);
+    TEST_ASSERT(reply.thread_2_duration < 1000);
+}
 
 void supervisor_task(__unused void *params)
 {
 
     printf("Starting test run.\n");
-        UNITY_BEGIN();
-        RUN_TEST(test_binary);
-        RUN_TEST(test_mutex);
-        UNITY_END();
-        sleep_ms(5000);
-
-
-
-    
+    UNITY_BEGIN();
+    RUN_TEST(test_binary);
+    RUN_TEST(test_mutex);
+    RUN_TEST(test_same_priority_busy_busy);
+    RUN_TEST(test_same_priority_yield_yield);
+    RUN_TEST(test_same_priority_busy_yield);
+    RUN_TEST(test_diff_priority_busy_busy_high_first);
+    RUN_TEST(test_diff_priority_busy_busy_low_first);
+    RUN_TEST(test_diff_priority_yield_yield_high_first);
+    RUN_TEST(test_diff_priority_yield_yield_low_first);
+    UNITY_END();
+    sleep_ms(5000);
 }
 
 int main(void)
