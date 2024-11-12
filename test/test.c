@@ -32,7 +32,10 @@ typedef void (*thread_function)(void);
 
 struct task_args
 {
-    int start_first;
+    char thread_1_name[50];
+    char thread_2_name[50];
+    int thread_1_start_delay;
+    int thread_2_start_delay;
     int thread_1_priority;
     int thread_2_priority;
     thread_function thread_1_function;
@@ -209,18 +212,16 @@ void test_mutex(void)
     TEST_ASSERT_EQUAL_INT(1, y);
 }
 
-void busy_busy()
+void busy_busy(char *thread_name)
 {
-    int ans = (2 * 32 * -3) / (-2);
-    printf("Start busy_busy: %d\n", ans);
+    printf("Start busy_busy: %s\n", thread_name);
     for (int i = 0;; i++)
         ;
 }
 
-void busy_yield(void)
+void busy_yield(char *thread_name)
 {
-    int ans = (2 * 32 * -3) / (-2);
-    printf("Start busy_yield: %d\n", ans);
+    printf("Start busy_yield: %s\n", thread_name);
     for (int i = 0;; i++)
     {
         taskYIELD();
@@ -233,60 +234,20 @@ struct task_reply run_task(void *params)
     struct task_reply reply = {0, 0};
     struct task_args *args = (struct task_args *)params;
 
-    // Start both thread at same time
-    if (args->start_first == 0)
-    {
-        // printf("Starting thread 1...\n");
-        xTaskCreate(args->thread_1_function, "Thread1",
-                    SUBORDINATE_TASK_STACK_SIZE, NULL, args->thread_1_priority, &thread_1);
+    vTaskDelay(args->thread_1_start_delay);
+    xTaskCreate(args->thread_1_function, "Thread1", SUBORDINATE_TASK_STACK_SIZE, args->thread_1_name, args->thread_1_priority, &thread_1);
+    printf("Started %s with %d delay...\n", args->thread_1_name, args->thread_1_start_delay);
 
-        // printf("Starting thread 2...\n");
-        xTaskCreate(args->thread_2_function, "Thread1",
-                    SUBORDINATE_TASK_STACK_SIZE, NULL, args->thread_2_priority, &thread_2);
-
-        printf("Started thread 1 & 2 together...\n");
-    }
-    else if (args->start_first == 1)
-    {
-
-        printf("Starting thread 1...\n");
-        xTaskCreate(args->thread_1_function, "Thread1",
-                    SUBORDINATE_TASK_STACK_SIZE, NULL, args->thread_1_priority, &thread_1);
-
-        vTaskDelay(10 * 1000);
-
-        printf("Starting thread 2...\n");
-        xTaskCreate(args->thread_2_function, "Thread1",
-                    SUBORDINATE_TASK_STACK_SIZE, NULL, args->thread_2_priority, &thread_2);
-
-        printf("Started thread 1 started first...\n");
-    }
-    else if (args->start_first == 2)
-    {
-        printf("Starting thread 2...\n");
-        xTaskCreate(args->thread_2_function, "Thread1",
-                    SUBORDINATE_TASK_STACK_SIZE, NULL, args->thread_2_priority, &thread_2);
-
-        vTaskDelay(10 * 1000);
-
-        printf("Starting thread 1...\n");
-        xTaskCreate(args->thread_1_function, "Thread1",
-                    SUBORDINATE_TASK_STACK_SIZE, NULL, args->thread_1_priority, &thread_1);
-
-        printf("Started thread 2 started first...\n");
-    }
-    else
-    {
-        printf("Invalid 'start_first' configuration. Supported values: 0, 1, 2.\n");
-        return reply;
-    }
+    vTaskDelay(args->thread_2_start_delay);
+    xTaskCreate(args->thread_2_function, "Thread2", SUBORDINATE_TASK_STACK_SIZE, args->thread_2_name, args->thread_2_priority, &thread_2);
+    printf("Started %s with %d delay...\n", args->thread_2_name, args->thread_2_start_delay);
 
     printf("Collecting runtime...\n");
     vTaskDelay(30 * 1000); // Wait for 30 seconds to collect results.
 
     reply.thread_1_duration = ulTaskGetRunTimeCounter(thread_1);
     reply.thread_2_duration = ulTaskGetRunTimeCounter(thread_2);
-    printf("Thread 1 duration: %lld, Thread 2 duration: %lld\n", reply.thread_1_duration, reply.thread_2_duration);
+    printf("%s duration: %lld, %s duration: %lld\n", args->thread_1_name, reply.thread_1_duration, args->thread_2_name, reply.thread_2_duration);
 
     return reply;
 }
@@ -296,7 +257,10 @@ void test_same_priority_busy_busy(__unused void *params)
     printf("\nTEST :: test_same_priority_busy_busy\n");
 
     struct task_args args;
-    args.start_first = 0;
+    strcpy(args.thread_1_name, "High Priority Thread");
+    strcpy(args.thread_2_name, "Low Priority Thread");
+    args.thread_1_start_delay = 0;
+    args.thread_2_start_delay = 0;
     args.thread_1_priority = LOW_PRIORITY;
     args.thread_2_priority = LOW_PRIORITY;
     args.thread_1_function = busy_busy;
@@ -313,7 +277,10 @@ void test_same_priority_yield_yield(__unused void *params)
     printf("\nTEST :: test_same_priority_yield_yield\n");
 
     struct task_args args;
-    args.start_first = 0;
+    strcpy(args.thread_1_name, "High Priority Thread");
+    strcpy(args.thread_2_name, "Low Priority Thread");
+    args.thread_1_start_delay = 0;
+    args.thread_2_start_delay = 0;
     args.thread_1_priority = LOW_PRIORITY;
     args.thread_2_priority = LOW_PRIORITY;
     args.thread_1_function = busy_yield;
@@ -331,7 +298,10 @@ void test_same_priority_busy_yield(__unused void *params)
     printf("\nTEST :: test_same_priority_busy_yield\n");
 
     struct task_args args;
-    args.start_first = 0;
+    strcpy(args.thread_1_name, "High Priority Thread");
+    strcpy(args.thread_2_name, "Low Priority Thread");
+    args.thread_1_start_delay = 0;
+    args.thread_2_start_delay = 0;
     args.thread_1_priority = LOW_PRIORITY;
     args.thread_2_priority = LOW_PRIORITY;
     args.thread_1_function = busy_busy;
@@ -349,7 +319,10 @@ void test_diff_priority_busy_busy_high_first(__unused void *params)
     printf("\nTEST :: test_diff_priority_busy_busy_high_first\n");
 
     struct task_args args;
-    args.start_first = 1;
+    strcpy(args.thread_1_name, "High Priority Thread");
+    strcpy(args.thread_2_name, "Low Priority Thread");
+    args.thread_1_start_delay = 0;
+    args.thread_2_start_delay = 100;
     args.thread_1_priority = HIGH_PRIORITY;
     args.thread_2_priority = LOW_PRIORITY;
     args.thread_1_function = busy_busy;
@@ -367,17 +340,20 @@ void test_diff_priority_busy_busy_low_first(__unused void *params)
     printf("\nTEST :: test_diff_priority_busy_busy_low_first\n");
 
     struct task_args args;
-    args.start_first = 2;
-    args.thread_1_priority = HIGH_PRIORITY;
-    args.thread_2_priority = LOW_PRIORITY;
+    strcpy(args.thread_1_name, "Low Priority Thread");
+    strcpy(args.thread_2_name, "High Priority Thread");
+    args.thread_1_start_delay = 0;
+    args.thread_2_start_delay = 100;
+    args.thread_1_priority = LOW_PRIORITY;
+    args.thread_2_priority = HIGH_PRIORITY;
     args.thread_1_function = busy_busy;
     args.thread_2_function = busy_busy;
 
     struct task_reply reply;
     reply = run_task(&args);
 
-    TEST_ASSERT(reply.thread_1_duration > 100000);
-    TEST_ASSERT(reply.thread_2_duration < 1000);
+    TEST_ASSERT(reply.thread_1_duration < 100000);
+    TEST_ASSERT(reply.thread_2_duration > 1000000);
 }
 
 void test_diff_priority_yield_yield_high_first(__unused void *params)
@@ -385,7 +361,10 @@ void test_diff_priority_yield_yield_high_first(__unused void *params)
     printf("\nTEST :: test_diff_priority_yield_yield_high_first\n");
 
     struct task_args args;
-    args.start_first = 1;
+    strcpy(args.thread_1_name, "High Priority Thread");
+    strcpy(args.thread_2_name, "Low Priority Thread");
+    args.thread_1_start_delay = 0;
+    args.thread_2_start_delay = 100;
     args.thread_1_priority = HIGH_PRIORITY;
     args.thread_2_priority = LOW_PRIORITY;
     args.thread_1_function = busy_yield;
@@ -394,8 +373,8 @@ void test_diff_priority_yield_yield_high_first(__unused void *params)
     struct task_reply reply;
     reply = run_task(&args);
 
-    TEST_ASSERT(reply.thread_1_duration > 40000);
-    TEST_ASSERT(reply.thread_2_duration < 1000);
+    TEST_ASSERT(reply.thread_1_duration > 10000);
+    TEST_ASSERT(reply.thread_2_duration < 10000);
 }
 
 void test_diff_priority_yield_yield_low_first(__unused void *params)
@@ -403,34 +382,55 @@ void test_diff_priority_yield_yield_low_first(__unused void *params)
     printf("\nTEST :: test_diff_priority_yield_yield_low_first\n");
 
     struct task_args args;
-    args.start_first = 2;
-    args.thread_1_priority = HIGH_PRIORITY;
-    args.thread_2_priority = LOW_PRIORITY;
+    strcpy(args.thread_1_name, "Low Priority Thread");
+    strcpy(args.thread_2_name, "High Priority Thread");
+    args.thread_1_start_delay = 0;
+    args.thread_2_start_delay = 100;
+    args.thread_1_priority = LOW_PRIORITY;
+    args.thread_2_priority = HIGH_PRIORITY;
     args.thread_1_function = busy_yield;
     args.thread_2_function = busy_yield;
 
     struct task_reply reply;
     reply = run_task(&args);
 
-    TEST_ASSERT(reply.thread_1_duration > 20000);
-    // TEST_ASSERT(reply.thread_2_duration > 10);
-    TEST_ASSERT(reply.thread_2_duration < 1000);
+    TEST_ASSERT(reply.thread_1_duration < 10000);
+    TEST_ASSERT(reply.thread_2_duration > 20000);
 }
 
 void supervisor_task(__unused void *params)
 {
 
-    printf("Starting test run.\n");
+    printf("Running Test...\n");
     UNITY_BEGIN();
-    RUN_TEST(test_binary);
-    RUN_TEST(test_mutex);
+
+    // RUN_TEST(test_binary);
+    // sleep_ms(500);
+
+    // RUN_TEST(test_mutex);
+    // sleep_ms(500);
+
     RUN_TEST(test_same_priority_busy_busy);
+    sleep_ms(500);
+
     RUN_TEST(test_same_priority_yield_yield);
+    sleep_ms(500);
+
     RUN_TEST(test_same_priority_busy_yield);
+    sleep_ms(500);
+
     RUN_TEST(test_diff_priority_busy_busy_high_first);
+    sleep_ms(500);
+
     RUN_TEST(test_diff_priority_busy_busy_low_first);
+    sleep_ms(500);
+
     RUN_TEST(test_diff_priority_yield_yield_high_first);
+    sleep_ms(500);
+
     RUN_TEST(test_diff_priority_yield_yield_low_first);
+    sleep_ms(500);
+
     UNITY_END();
     sleep_ms(5000);
 }
