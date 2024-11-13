@@ -132,13 +132,13 @@ void test_binary(void)
     printf("Stating low priority task\n");
     xTaskCreate(subordinate_task_low, "SubordinateLow",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_LOW_PRIORITY, &low);
-    vTaskDelay(1);
+    vTaskDelay(10);
 
     // Start high task right after
     printf("Stating high priority task\n");
     xTaskCreate(subordinate_task_high, "SubordinateHigh",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_HIGH_PRIORITY, &high);
-    vTaskDelay(1);
+    vTaskDelay(10);
 
     // Start medium task to have it interrupt low task and start computation
     printf("Stating medium priority task\n");
@@ -184,13 +184,13 @@ void test_mutex(void)
     printf("Stating low priority task\n");
     xTaskCreate(subordinate_task_low, "SubordinateLow",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_LOW_PRIORITY, &low);
-    vTaskDelay(1);
+    vTaskDelay(10);
 
     // Start high task right after
     printf("Stating high priority task\n");
     xTaskCreate(subordinate_task_high, "SubordinateHigh",
                 SUBORDINATE_TASK_STACK_SIZE, NULL, SUBORDINATE_TASK_HIGH_PRIORITY, &high);
-    vTaskDelay(1);
+    vTaskDelay(10);
 
     // Start medium task to have it interrupt low task and start computation
     printf("Stating medium priority task\n");
@@ -404,10 +404,10 @@ void supervisor_task(__unused void *params)
     printf("Running Test...\n");
     UNITY_BEGIN();
 
-    // RUN_TEST(test_binary);
+    RUN_TEST(test_binary);
     // sleep_ms(500);
 
-    // RUN_TEST(test_mutex);
+    RUN_TEST(test_mutex);
     // sleep_ms(500);
 
     RUN_TEST(test_same_priority_busy_busy);
